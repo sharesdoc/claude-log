@@ -1,0 +1,392 @@
+#!/usr/bin/env bash
+# ═══════════════════════════════════════════════════════════════════
+# claude-task-history — 本地安装 / 卸载 / 重装脚本
+# ═══════════════════════════════════════════════════════════════════
+#
+# 安装流程：
+#   1. 生成 ~/.claude/plugins/marketplaces/claude-task-history-local/
+#         └── .claude-plugin/marketplace.json   （marketplace 清单）
+#   2. rsync 拷贝源码到 marketplace dir 的 plugin/ 子目录
+#      （Claude Code 要求真目录，不接受 symlink）
+#   3. 调用 claude plugin marketplace add <dir> 注册 marketplace
+#      （CLI 自动写入 ~/.claude/plugins/known_marketplaces.json +
+#       ~/.claude/settings.json 的 extraKnownMarketplaces）
+#   4. 调用 claude plugin install <name>@<marketplace> 启用插件
+#
+# 卸载流程：
+#   1. 调用 claude plugin uninstall           禁用插件
+#   2. 调用 claude plugin marketplace remove   注销 marketplace
+#   3. rm -rf 删除 marketplace 目录
+#   4. 不动 $HOME/.cai/projects/ 下历史数据（历史保留）
+#
+# 设计原则：
+#   - 所有 settings.json / known_marketplaces.json 编辑走官方 CLI，
+#     不手猜 schema。CLI 幂等：重复 add 回 "already on disk"。
+#   - 默认不装（./install → help），需显式 -i，防误操作。
+#   - 状态命令（-s）纯读不写，可放心用。
+#
+# ═══════════════════════════════════════════════════════════════════
+
+set -e
+
+# ─────────────────────────────────────────────────────────────────────
+# 常量
+# ─────────────────────────────────────────────────────────────────────
+PLUGIN_NAME="claude-task-history"
+MARKETPLACE_NAME="claude-task-history-local"
+PLUGIN_KEY="${PLUGIN_NAME}@${MARKETPLACE_NAME}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_SOURCE="$SCRIPT_DIR"
+
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+SETTINGS_FILE="$CLAUDE_DIR/settings.json"
+MARKETPLACE_DIR="$CLAUDE_DIR/plugins/marketplaces/$MARKETPLACE_NAME"
+MARKETPLACE_JSON="$MARKETPLACE_DIR/.claude-plugin/marketplace.json"
+
+# ─────────────────────────────────────────────────────────────────────
+# 颜色 & 日志
+# ─────────────────────────────────────────────────────────────────────
+if [ -t 1 ]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'; C_BLUE=$'\033[34m'
+else
+  C_RESET=; C_BOLD=; C_DIM=; C_GREEN=; C_YELLOW=; C_RED=; C_BLUE=
+fi
+
+info()  { printf '%s▶ %s%s\n' "$C_BLUE"   "$*" "$C_RESET"; }
+ok()    { printf '%s✓ %s%s\n' "$C_GREEN"  "$*" "$C_RESET"; }
+warn()  { printf '%s! %s%s\n' "$C_YELLOW" "$*" "$C_RESET"; }
+err()   { printf '%s✗ %s%s\n' "$C_RED"    "$*" "$C_RESET" >&2; }
+
+# ─────────────────────────────────────────────────────────────────────
+# 前置检查
+# ─────────────────────────────────────────────────────────────────────
+
+# 安装和卸载都需要 claude CLI（plugin marketplace add/remove + install/uninstall）
+need_claude_cli() {
+  if ! command -v claude >/dev/null 2>&1; then
+    err "需要 claude CLI 但未在 PATH 中（应该跟 Claude Code 一起装着）。"
+    exit 1
+  fi
+}
+
+# Stop hook 由 node 驱动；node 缺失时仅告警不阻断（插件仍可装入，hook 不工作）
+need_node() {
+  if ! command -v node >/dev/null 2>&1; then
+    warn "未检测到 node。SessionStart/Stop hook 依赖 node 运行 scripts/*-hook.js；插件本身仍可装入，但 hook 将无法工作。"
+  fi
+}
+
+# 安装/重装阶段需 rsync 拷贝源码到 marketplace 镜像目录
+need_rsync() {
+  if ! command -v rsync >/dev/null 2>&1; then
+    err "需要 rsync 但未在 PATH 中（macOS 自带；Linux 极简镜像可能缺,请 apt/yum install rsync）。"
+    exit 1
+  fi
+}
+
+# 确保源目录包含全套必要文件，在 rsync 到 marketplace 之前发现缺失
+check_source_layout() {
+  for f in .claude-plugin/plugin.json hooks/hooks.json scripts/stop-hook.js scripts/session-start-hook.js templates/aitask-entry.md skills/his/SKILL.md commands/his.md; do
+    if [ ! -e "$PLUGIN_SOURCE/$f" ]; then
+      err "源目录缺少必要文件：$PLUGIN_SOURCE/$f"
+      exit 1
+    fi
+  done
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# Marketplace 注册/注销（走官方 CLI，避免手猜 schema）
+# ─────────────────────────────────────────────────────────────────────
+
+# Claude Code v2.1.170+ 要求 known_marketplaces.json 为 JSON 对象（record），
+# 不再接受旧版数组格式（CLI 报 "expected record, received array"）。
+#
+# 遗留数组仅含 marketplace 名称列表，缺少新格式所需的 source/installLocation。
+# 关键约束：迁移必须【无损】。早期实现直接 json.dump({}) 清空全部注册，
+# 而本脚本只会重新 add 自己的 marketplace，导致其余 marketplace（及其已启用
+# 插件）全部丢失、表现为 "failed to load"。
+#
+# 正确做法：把遗留数组里的每个名称，依据磁盘上已存在的 marketplace 目录
+# 重建为对象条目——有 github remote 的重建为 github 源，否则重建为
+# directory 源；迁移前先备份；无法重建的名称仅告警、绝不静默丢弃。
+fix_known_marketplaces_json() {
+  local f="$CLAUDE_DIR/plugins/known_marketplaces.json"
+  [ -f "$f" ] || return 0
+  python3 - "$f" "$CLAUDE_DIR/plugins/marketplaces" <<'PY'
+import json, os, re, subprocess, sys
+from datetime import datetime, timezone
+
+path, mkt_dir = sys.argv[1], sys.argv[2]
+try:
+    with open(path) as fh:
+        data = json.load(fh)
+except Exception as e:
+    print(f"WARN: known_marketplaces.json 解析失败，跳过迁移：{e}", file=sys.stderr)
+    sys.exit(0)
+
+# 已是新格式（对象）则无需处理
+if isinstance(data, dict):
+    sys.exit(0)
+if not isinstance(data, list):
+    print("WARN: known_marketplaces.json 格式异常（非数组非对象），跳过迁移", file=sys.stderr)
+    sys.exit(0)
+
+# 迁移前备份，便于人工回溯
+bak = path + ".legacy-" + datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + ".bak"
+try:
+    with open(bak, "w") as fh:
+        json.dump(data, fh)
+except Exception as e:
+    print(f"WARN: 备份遗留 known_marketplaces.json 失败：{e}", file=sys.stderr)
+
+def remote_repo(d):
+    """从 git remote 推导 owner/repo；非 git 仓库返回 None。"""
+    try:
+        url = subprocess.check_output(
+            ["git", "-C", d, "config", "--get", "remote.origin.url"],
+            stderr=subprocess.DEVNULL, text=True).strip()
+    except Exception:
+        return None
+    m = re.search(r"[:/]([^/]+/[^/]+?)(?:\.git)?$", url)
+    return m.group(1) if m else None
+
+now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+rebuilt, lost = {}, []
+for name in data:
+    if not isinstance(name, str):
+        continue
+    loc = os.path.join(mkt_dir, name)
+    if not os.path.isdir(loc):
+        lost.append(name)          # 磁盘无对应目录，无法重建
+        continue
+    repo = remote_repo(loc)
+    if repo:
+        src = {"source": "github", "repo": repo}
+    else:
+        src = {"source": "directory", "path": loc}
+    rebuilt[name] = {"source": src, "installLocation": loc, "lastUpdated": now}
+
+with open(path, "w") as fh:
+    json.dump(rebuilt, fh, indent=2, ensure_ascii=False)
+
+print(f"INFO: known_marketplaces.json 已从遗留数组无损迁移为对象（重建 {len(rebuilt)} 个，备份 {os.path.basename(bak)}）", file=sys.stderr)
+if lost:
+    print("WARN: 以下 marketplace 在磁盘上无对应目录，未能重建，请手动 'claude plugin marketplace add'：" + ", ".join(lost), file=sys.stderr)
+PY
+}
+
+# 调 claude CLI 注册 marketplace 到 known_marketplaces.json + extraKnownMarketplaces
+register_marketplace() {
+  fix_known_marketplaces_json
+  # 幂等：已存在时 CLI 回 "Marketplace 'xxx' already on disk" 且 rc=0
+  if ! claude plugin marketplace add "$MARKETPLACE_DIR" >/dev/null; then
+    err "claude plugin marketplace add 失败（marketplace dir：$MARKETPLACE_DIR）。请手动 'claude plugin marketplace list' 检查。"
+    exit 1
+  fi
+  ok "已注册 marketplace：$MARKETPLACE_NAME"
+}
+
+unregister_marketplace() {
+  # 幂等：不存在时 CLI rc=0 静默返回
+  fix_known_marketplaces_json
+  claude plugin marketplace remove "$MARKETPLACE_NAME" >/dev/null 2>&1 || true
+  # 同时清理 settings.json extraKnownMarketplaces 中的残留条目
+  python3 -c "
+import json,sys
+f='$SETTINGS_FILE'
+try:
+    d=json.load(open(f))
+    if 'extraKnownMarketplaces' in d and '$MARKETPLACE_NAME' in d['extraKnownMarketplaces']:
+        del d['extraKnownMarketplaces']['$MARKETPLACE_NAME']
+        json.dump(d,open(f,'w'),indent=2,ensure_ascii=False)
+        sys.stderr.write('cleaned extraKnownMarketplaces\\n')
+except Exception as e:
+    sys.stderr.write(f'settings cleanup skipped: {e}\\n')
+" 2>/dev/null || true
+  ok "已注销 marketplace：$MARKETPLACE_NAME"
+}
+
+# 调 claude CLI 在 enabledPlugins 中启用 @ 本 marketplace
+enable_plugin() {
+  claude plugin install "$PLUGIN_KEY" >/dev/null
+  ok "已启用插件：$PLUGIN_KEY"
+}
+
+disable_plugin() {
+  claude plugin uninstall "$PLUGIN_KEY" >/dev/null 2>&1 || true
+  ok "已禁用插件：$PLUGIN_KEY"
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# marketplace 包装目录
+# ─────────────────────────────────────────────────────────────────────
+
+# 生成 marketplace.json。source: "./plugin" 由 Claude Code 相对于本
+# marketplace.json 所在目录解析（即 $MARKETPLACE_DIR/plugin）。
+write_marketplace_json() {
+  mkdir -p "$(dirname "$MARKETPLACE_JSON")"
+  cat > "$MARKETPLACE_JSON" <<EOF
+{
+  "name": "$MARKETPLACE_NAME",
+  "owner": {
+    "name": "Johnson"
+  },
+  "metadata": {
+    "description": "Local marketplace for claude-task-history (dev)",
+    "homepage": "$PLUGIN_SOURCE"
+  },
+  "plugins": [
+    {
+      "name": "$PLUGIN_NAME",
+      "version": "0.1.0",
+      "source": "./plugin",
+      "description": "三段式任务归档（需求/方案/验收）+ /his 历史回看"
+    }
+  ]
+}
+EOF
+}
+
+# rsync 拷贝源码到 marketplace/plugin/，排除不必要文件。
+# 为什么不用 symlink：Claude Code 解析 marketplace.json source 字段时
+# 不走符号链接（所有官方 marketplace 都用真目录）。
+# 源码改动后跑 ./install -r 重新同步。
+mirror_plugin() {
+  local dest="$MARKETPLACE_DIR/plugin"
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  rsync -a --delete \
+    --exclude='.git' \
+    --exclude='node_modules' \
+    --exclude='.DS_Store' \
+    --exclude='*.bak' \
+    --exclude='.pid' \
+    "$PLUGIN_SOURCE/" "$dest/"
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 安装 / 卸载 / 状态
+# ─────────────────────────────────────────────────────────────────────
+do_install() {
+  info "claude-task-history 安装中"
+  info "  源目录：$PLUGIN_SOURCE"
+  info "  目标 marketplace：$MARKETPLACE_DIR"
+
+  need_claude_cli
+  need_node
+  need_rsync
+  check_source_layout
+
+  write_marketplace_json
+  mirror_plugin
+  register_marketplace
+  enable_plugin
+
+  ok "已写入 $MARKETPLACE_JSON"
+  ok "已拷贝 $PLUGIN_SOURCE → $MARKETPLACE_DIR/plugin"
+  printf '\n%s✅ claude-task-history 安装完成%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
+  printf '%s   下一步请重启 Claude Code 进程使 hook 生效。%s\n' "$C_DIM" "$C_RESET"
+  printf '%s   使用方式见 README 或 %s./install -h%s\n' "$C_DIM" "$C_BOLD" "$C_RESET$C_DIM"
+}
+
+do_uninstall() {
+  info "claude-task-history 卸载中"
+  need_claude_cli
+
+  disable_plugin
+  unregister_marketplace
+
+  if [ -d "$MARKETPLACE_DIR" ]; then
+    rm -rf "$MARKETPLACE_DIR"
+    ok "已删除 $MARKETPLACE_DIR"
+  else
+    warn "$MARKETPLACE_DIR 不存在，跳过删除"
+  fi
+
+  warn "保留 \$HOME/.cai/projects/ 历史不动；如需清空请自行 rm。"
+}
+
+do_reinstall() {
+  info "重装：先卸载再安装"
+  do_uninstall
+  printf '\n'
+  do_install
+}
+
+do_status() {
+  printf '%sclaude-task-history 状态%s\n' "$C_BOLD" "$C_RESET"
+  printf '  插件源：    %s\n' "$PLUGIN_SOURCE"
+  printf '  Marketplace：%s\n' "$MARKETPLACE_DIR"
+
+  if [ -f "$MARKETPLACE_JSON" ]; then
+    printf '  marketplace.json: %s✓ 存在%s\n' "$C_GREEN" "$C_RESET"
+  else
+    printf '  marketplace.json: %s✗ 缺失%s\n' "$C_RED" "$C_RESET"
+  fi
+
+  if [ -d "$MARKETPLACE_DIR/plugin" ] && [ ! -L "$MARKETPLACE_DIR/plugin" ]; then
+    local pmf="$MARKETPLACE_DIR/plugin/.claude-plugin/plugin.json"
+    if [ -f "$pmf" ]; then
+      printf '  plugin mirror:    %s✓ 真目录（%s）%s\n' "$C_GREEN" "$MARKETPLACE_DIR/plugin" "$C_RESET"
+    else
+      printf '  plugin mirror:    %s✗ 目录存在但缺 plugin.json%s\n' "$C_RED" "$C_RESET"
+    fi
+  elif [ -L "$MARKETPLACE_DIR/plugin" ]; then
+    printf '  plugin mirror:    %s✗ 是 symlink（Claude Code 不接受）%s\n' "$C_RED" "$C_RESET"
+  else
+    printf '  plugin mirror:    %s✗ 缺失%s\n' "$C_RED" "$C_RESET"
+  fi
+
+  if command -v claude >/dev/null 2>&1; then
+    if claude plugin marketplace list 2>/dev/null | grep -qE "[❯>]\s+$MARKETPLACE_NAME(\s|$)"; then
+      printf '  marketplace 注册：%s✓ 已在 known_marketplaces.json%s\n' "$C_GREEN" "$C_RESET"
+    else
+      printf '  marketplace 注册：%s✗ 未注册（需 ./install -i）%s\n' "$C_RED" "$C_RESET"
+    fi
+  else
+    printf '  marketplace 注册：%s? claude CLI 未在 PATH%s\n' "$C_YELLOW" "$C_RESET"
+  fi
+}
+
+show_help() {
+  cat <<EOF
+${C_BOLD}claude-task-history install script${C_RESET}
+
+用法：
+  ${C_BOLD}./install${C_RESET}              # 显示本帮助（默认，安全起见不直接装）
+  ${C_BOLD}./install -h${C_RESET}           # 显示本帮助
+  ${C_BOLD}./install -i${C_RESET}           # 安装
+  ${C_BOLD}./install -u${C_RESET}           # 卸载（保留 \$HOME/.cai/projects/ 历史）
+  ${C_BOLD}./install -r${C_RESET}           # 重装（-u 然后 -i）
+  ${C_BOLD}./install -s${C_RESET}           # 查看当前安装状态
+
+安装位置：
+  ~/.claude/plugins/marketplaces/${MARKETPLACE_NAME}/
+
+环境：
+  CLAUDE_CONFIG_DIR    覆盖 ~/.claude（多账号场景）
+
+注意：
+  - 安装/卸载后需重启 Claude Code 进程才能让 hook 重新装载
+  - 若不放心 settings.json 改动，建议提前自行 git 跟踪或快照
+EOF
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# 入口
+# ─────────────────────────────────────────────────────────────────────
+case "${1:-}" in
+  ""|-h|--help)    show_help ;;
+  -i|--install)    do_install ;;
+  -u|--uninstall)  do_uninstall ;;
+  -r|--reinstall)  do_reinstall ;;
+  -s|--status)     do_status ;;
+  *)
+    err "未知参数：$1"
+    printf '\n'
+    show_help
+    exit 1
+    ;;
+esac

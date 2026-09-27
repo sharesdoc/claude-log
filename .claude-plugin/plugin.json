@@ -1,0 +1,18 @@
+{
+  "name": "claude-task-history",
+  "version": "0.4.0",
+  "description": "三段式任务归档(需求/方案/验收) → $HOME/.cai/projects/$hash/history.md;Stop hook 自动写入,SessionStart 启动注入近期任务,/his 命令回看历史。",
+  "author": {
+    "name": "Johnson",
+    "email": "Johnson@mailbox.com"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "task-history",
+    "aitask",
+    "stop-hook",
+    "session-start-hook"
+  ]
+}

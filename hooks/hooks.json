@@ -1,0 +1,29 @@
+{
+  "description": "claude-task-history — SessionStart 注入近期历史 + Stop 归档三段式任务",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-start-hook.js\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.js\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
