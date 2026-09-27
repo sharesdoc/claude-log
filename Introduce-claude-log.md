@@ -1,4 +1,4 @@
-# claude-task-history
+# claude-log
 
 > Claude Code 的任务级审计日志插件 — 对 Claude 说"任务完成"即自动生成三段式决策摘要，跨 session 持久化审计。
 
@@ -6,8 +6,8 @@
 
 一个 Claude Code 插件，通过 Stop hook 和 SessionStart hook 实现任务历史的自动归档与注入。当你对 Claude 说"任务完成"时，插件自动拦截下一轮对话，将本轮工作蒸馏为"需求/问题 → 决策/方案 → 验收/总结"三段式摘要，追加到全局档案 `$HOME/.cai/projects/$hash/history.md`；下次启动 session 时自动注入近期任务摘要，让 Claude 记住你做过什么。
 
-- **仓库地址**：`git@git.hnzhzw.com:ai/plugins/claude-task-history.git`
-- **本地路径**：`/Users/johnson/wks/ai/plugins/claude-task-history`
+- **仓库地址**：`git@git.hnzhzw.com:ai/plugins/claude-log.git`
+- **本地路径**：`/Users/johnson/wks/ai/plugins/claude-log`
 - **当前分支**：`main`
 - **最新提交**：2026-06-17
 - **版本**：v0.3.0（未发布 tag，仅见 plugin.json 中标注）
@@ -19,7 +19,7 @@ Claude Code 不会自动记录你让它做了什么、为什么这么做、踩�
 ## 核心功能与特点
 
 1. **自动归档** — Stop hook 检测"任务完成"短语（仅末尾命中），拦截下一轮，注入三段式写入指令（附带模板 `templates/aitask-entry.md`），Claude 自动追加到全局历史文件。含否定词保护（"不要再说任务完成"等场景自动跳过）和死循环保护（`stop_hook_active` 标示）。
-2. **启动注入** — SessionStart hook 在每次启动/恢复/clear session 时自动计算当前项目 sha1 哈希，确保档案目录和 `path` 文件就绪；读取最近 5 条（14 天内）历史通过 `additionalContext` 注入，让 Claude 启动时"想起"近期工作。条数和时间窗可通过环境变量 `CLAUDE_TASK_HISTORY_RECENT_N` / `CLAUDE_TASK_HISTORY_RECENT_DAYS` 配置。
+2. **启动注入** — SessionStart hook 在每次启动/恢复/clear session 时自动计算当前项目 sha1 哈希，确保档案目录和 `path` 文件就绪；读取最近 10 条（10 天内）历史通过 `additionalContext` 注入，让 Claude 启动时"想起"近期工作。条数和时间窗可通过环境变量 `CLAUDE_LOG_RECENT_N` / `CLAUDE_LOG_RECENT_DAYS` 配置。
 3. **/his 命令** — 回看任务历史：`/his`（今天）、`/his N`（最近 N 天），输出倒序排列、保留三段原文、末尾附日期维度条数统计。
 4. **自然语言触发** — 配套 `/his` skill（如"今天做了什么"），由 hooks 自动匹配。
 5. **存储隔离** — 档案存于 `$HOME/.cai/projects/`（按 sha1 哈希分桶），不污染项目目录，工作目录改名/移动不影响。
@@ -52,7 +52,7 @@ Claude Code 不会自动记录你让它做了什么、为什么这么做、踩�
 ## 核心架构
 
 ```
-claude-task-history/
+claude-log/
 ├── .claude-plugin/plugin.json          # 插件 manifest（name/version/author）
 ├── hooks/hooks.json                    # 注册 SessionStart + Stop 两个 hook
 ├── scripts/
@@ -69,7 +69,7 @@ claude-task-history/
 ## 本地安装 / 卸载
 
 ```bash
-cd /path/to/claude-task-history
+cd /path/to/claude-log
 ./install -i    # 安装
 ./install -s    # 查看安装状态
 ./install -r    # 重装（源码修改后必须重装）
@@ -99,7 +99,7 @@ MIT（见 `plugin.json` 的 license 字段及 README 末尾声明）
 
 同类方案对比：
 
-| 维度 | claude-task-history | claude-mem |
+| 维度 | claude-log | claude-mem |
 |---|---|---|
 | 触发方式 | 主动（你说"任务完成"） | 被动（每个 tool call） |
 | 存储形式 | `$HOME/.cai/projects/$hash/history.md` | 全局 SQLite + Chroma |
@@ -111,7 +111,7 @@ MIT（见 `plugin.json` 的 license 字段及 README 末尾声明）
 
 ## 了解更多
 
-- 项目 README：`/Users/johnson/wks/ai/plugins/claude-task-history/README.md`
+- 项目 README：`/Users/johnson/wks/ai/plugins/claude-log/README.md`
 - 插件清单：`.claude-plugin/plugin.json`
 - Hook 注册：`hooks/hooks.json`
 - 安装脚本：`install`

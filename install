@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════
-# claude-task-history — 本地安装 / 卸载 / 重装脚本
+# claude-log — 本地安装 / 卸载 / 重装脚本
 # ═══════════════════════════════════════════════════════════════════
 #
 # 安装流程：
-#   1. 生成 ~/.claude/plugins/marketplaces/claude-task-history-local/
+#   1. 生成 ~/.claude/plugins/marketplaces/claude-log-local/
 #         └── .claude-plugin/marketplace.json   （marketplace 清单）
 #   2. rsync 拷贝源码到 marketplace dir 的 plugin/ 子目录
 #      （Claude Code 要求真目录，不接受 symlink）
@@ -32,8 +32,8 @@ set -e
 # ─────────────────────────────────────────────────────────────────────
 # 常量
 # ─────────────────────────────────────────────────────────────────────
-PLUGIN_NAME="claude-task-history"
-MARKETPLACE_NAME="claude-task-history-local"
+PLUGIN_NAME="claude-log"
+MARKETPLACE_NAME="claude-log-local"
 PLUGIN_KEY="${PLUGIN_NAME}@${MARKETPLACE_NAME}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -234,7 +234,7 @@ write_marketplace_json() {
     "name": "Johnson"
   },
   "metadata": {
-    "description": "Local marketplace for claude-task-history (dev)",
+    "description": "Local marketplace for claude-log (dev)",
     "homepage": "$PLUGIN_SOURCE"
   },
   "plugins": [
@@ -270,7 +270,7 @@ mirror_plugin() {
 # 安装 / 卸载 / 状态
 # ─────────────────────────────────────────────────────────────────────
 do_install() {
-  info "claude-task-history 安装中"
+  info "claude-log 安装中"
   info "  源目录：$PLUGIN_SOURCE"
   info "  目标 marketplace：$MARKETPLACE_DIR"
 
@@ -286,13 +286,13 @@ do_install() {
 
   ok "已写入 $MARKETPLACE_JSON"
   ok "已拷贝 $PLUGIN_SOURCE → $MARKETPLACE_DIR/plugin"
-  printf '\n%s✅ claude-task-history 安装完成%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
+  printf '\n%s✅ claude-log 安装完成%s\n' "$C_GREEN$C_BOLD" "$C_RESET"
   printf '%s   下一步请重启 Claude Code 进程使 hook 生效。%s\n' "$C_DIM" "$C_RESET"
   printf '%s   使用方式见 README 或 %s./install -h%s\n' "$C_DIM" "$C_BOLD" "$C_RESET$C_DIM"
 }
 
 do_uninstall() {
-  info "claude-task-history 卸载中"
+  info "claude-log 卸载中"
   need_claude_cli
 
   disable_plugin
@@ -316,7 +316,7 @@ do_reinstall() {
 }
 
 do_status() {
-  printf '%sclaude-task-history 状态%s\n' "$C_BOLD" "$C_RESET"
+  printf '%sclaude-log 状态%s\n' "$C_BOLD" "$C_RESET"
   printf '  插件源：    %s\n' "$PLUGIN_SOURCE"
   printf '  Marketplace：%s\n' "$MARKETPLACE_DIR"
 
@@ -352,7 +352,7 @@ do_status() {
 
 show_help() {
   cat <<EOF
-${C_BOLD}claude-task-history install script${C_RESET}
+${C_BOLD}claude-log install script${C_RESET}
 
 用法：
   ${C_BOLD}./install${C_RESET}              # 显示本帮助（默认，安全起见不直接装）

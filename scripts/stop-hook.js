@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * claude-task-history — Stop hook 脚本
+ * claude-log — Stop hook 脚本
  *
  * ## 设计目的
  *
@@ -363,7 +363,7 @@ function main() {
   const templatePath = path.join(resolvePluginRoot(), 'templates', 'aitask-entry.md');
 
   const reason = [
-    `检测到「${TRIGGER_PHRASE}」标志，触发 claude-task-history 归档流程。`,
+    `检测到「${TRIGGER_PHRASE}」标志，触发 claude-log 归档流程。`,
     ``,
     `请按 ${templatePath} 的三段式模板，把本轮已完成任务追加到文件末尾：`,
     `  ${historyPath}`,

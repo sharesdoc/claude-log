@@ -1,4 +1,4 @@
-# claude-task-history
+# claude-log
 
 **项目级任务审计日志插件** — 在你对 Claude Code 说"任务完成"那一刻，自动把本轮对话蒸馏为三段式摘要，追加到全局档案 `$HOME/.cai/projects/$hash/history.md`(其中 `hash = sha1(项目绝对路径)`)。用 `/his` 命令随时回看；新开 session 时自动注入近期任务摘要。
 
@@ -15,13 +15,13 @@ claude-mem 能帮你做机器级召回（"上次那个 bug 怎么修的？"）�
 - **谁写的**：Claude 在你每轮"任务完成"后自动蒸馏（不需你手动整理）
 - **写在哪**：`$HOME/.cai/projects/$hash/history.md` (全局、按项目路径哈希分桶)
 - **写了什么**：需求/问题 → 决策/方案 → 验收/总结，三段式
-- **怎么看**：`/his`（今天）、`/his 3`（近 3 天）；新 session 启动时自动注入最近 5 条/14 天内的条目
+- **怎么看**：`/his`（今天）、`/his 3`（近 3 天）；新 session 启动时自动注入最近 10 条/10 天内的条目
 
 ---
 
 ## 与 claude-mem 的关系
 
-| 维度 | claude-task-history | claude-mem |
+| 维度 | claude-log | claude-mem |
 |---|---|---|
 | 触发 | ✅ 主动（你说"任务完成"） | 🔄 被动（每个 tool call） |
 | 存储 | 📄 `$HOME/.cai/projects/$hash/history.md` | 🗄️ 全局 SQLite + Chroma |
@@ -64,13 +64,13 @@ claude-mem 能帮你做机器级召回（"上次那个 bug 怎么修的？"）�
 每次启动/恢复/clear session 时,插件的 SessionStart hook 自动:
 
 1. 计算当前项目哈希,确保档案目录 `$HOME/.cai/projects/$hash/` 与 `path` 文件就绪
-2. 读取 `history.md` 末尾 **5 条** 任务(且发生在最近 **14 天** 内),通过 `additionalContext` 注入到本次 session
+2. 读取 `history.md` 末尾 **10 条** 任务(且发生在最近 **10 天** 内),通过 `additionalContext` 注入到本次 session
 
 让 Claude 启动时就能"想起"近期工作进展。
 
 **可配置**(环境变量):
-- `CLAUDE_TASK_HISTORY_RECENT_N`(默认 5)— 最多注入条数
-- `CLAUDE_TASK_HISTORY_RECENT_DAYS`(默认 14)— 时间窗(天)
+- `CLAUDE_LOG_RECENT_N`(默认 10)— 最多注入条数
+- `CLAUDE_LOG_RECENT_DAYS`(默认 10)— 时间窗(天)
 
 ### 3. `/his` — 回看任务历史
 
@@ -111,14 +111,14 @@ claude-mem 能帮你做机器级召回（"上次那个 bug 怎么修的？"）�
 ### 安装步骤
 
 ```bash
-cd /path/to/claude-task-history
+cd /path/to/claude-log
 ./install       # 显示帮助（默认安全，不直接装）
 ./install -i    # 安装
 ```
 
 安装做了什么：
 
-1. 生成 marketplace 清单到 `~/.claude/plugins/marketplaces/claude-task-history-local/`
+1. 生成 marketplace 清单到 `~/.claude/plugins/marketplaces/claude-log-local/`
 2. rsync 拷贝源码到 marketplace 目录（真目录，非 symlink — Claude Code 要求）
 3. 调用 `claude plugin marketplace add` 注册 marketplace
 4. 调用 `claude plugin install` 启用插件
@@ -221,7 +221,7 @@ $HOME/.cai/projects/<hash>/
 ## 目录结构
 
 ```
-claude-task-history/
+claude-log/
 ├── .claude-plugin/
 │   └── plugin.json              # 插件 manifest
 ├── hooks/
@@ -303,7 +303,7 @@ session_start_hook.js 读 stdin JSON 取 cwd
 | `/plugin` 报 "Plugin not found in marketplace" | `./install -s` 确认 marketplace 注册状态；若未注册，重跑 `./install -r` |
 | 说"任务完成"后没触发归档 | `./install -s` 确认插件启用；检查 `~/.claude/plugins/known_marketplaces.json` 有本 marketplace；确认 node 在 PATH |
 | `/his` 说文件不存在 | 当前项目还没说过"任务完成"——首次归档后 `history.md` 自动创建 |
-| 启动时没注入历史 | 1) 当前项目无任何归档;2) 最近 14 天内无条目;3) Hook 未生效(`./install -s` 检查) |
+| 启动时没注入历史 | 1) 当前项目无任何归档;2) 最近 10 天内无条目;3) Hook 未生效(`./install -s` 检查) |
 | Txxx 编号有跳号 | 正常：某些归档可能因 markdown 格式问题未产生 `##` 段头，下一轮继续递增（不影响使用） |
 
 ---

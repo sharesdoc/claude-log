@@ -16,7 +16,7 @@ A Claude Code plugin that automatically archives completed tasks as three-part s
 ./install       # Show help (safe default, does nothing)
 ```
 
-The source is rsync-copied to `~/.claude/plugins/marketplaces/claude-task-history-local/plugin/` — Claude Code requires real directories, not symlinks. Editing files here has no effect until `./install -r` is run.
+The source is rsync-copied to `~/.claude/plugins/marketplaces/claude-log-local/plugin/` — Claude Code requires real directories, not symlinks. Editing files here has no effect until `./install -r` is run.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ The source is rsync-copied to `~/.claude/plugins/marketplaces/claude-task-histor
 
 **SessionStart hook** (`scripts/session-start-hook.js`):
 1. Computes `hash = sha1(cwd)`, ensures `$HOME/.cai/projects/<hash>/` exists with `path` file
-2. Reads last N entries (default 5, within 14 days) and injects via `additionalContext` into session
+2. Reads last N entries (default 10, within 10 days) and injects via `additionalContext` into session
 
 **Stop hook** (`scripts/stop-hook.js`):
 1. Reads transcript JSONL, extracts last assistant message text
@@ -70,7 +70,7 @@ $HOME/.cai/projects/<sha1(cwd)>/
 
 Constants at the top of each script:
 - `scripts/stop-hook.js`: `TRIGGER_PHRASE`, `NEGATION_TOKENS`, `NEGATION_WINDOW`, `PROJECT_ARCHIVE_ROOT`, `HISTORY_FILE`
-- `scripts/session-start-hook.js`: `DEFAULT_RECENT_N` (5), `DEFAULT_RECENT_DAYS` (14), overridable via `CLAUDE_TASK_HISTORY_RECENT_N` / `CLAUDE_TASK_HISTORY_RECENT_DAYS` env vars
+- `scripts/session-start-hook.js`: `DEFAULT_RECENT_N` (10), `DEFAULT_RECENT_DAYS` (10), overridable via `CLAUDE_LOG_RECENT_N` / `CLAUDE_LOG_RECENT_DAYS` env vars
 
 ### macOS Compatibility
 

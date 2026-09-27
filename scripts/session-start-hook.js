@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * claude-task-history — SessionStart hook 脚本
+ * claude-log — SessionStart hook 脚本
  *
  * ## 设计目的
  *
@@ -15,8 +15,8 @@
  *
  * ## 可配置(环境变量)
  *
- *   CLAUDE_TASK_HISTORY_RECENT_N      最多注入条数,默认 5
- *   CLAUDE_TASK_HISTORY_RECENT_DAYS   时间窗(天),默认 14
+ *   CLAUDE_LOG_RECENT_N      最多注入条数,默认 10
+ *   CLAUDE_LOG_RECENT_DAYS   时间窗(天),默认 10
  *
  * ## 输入/输出协议
  *
@@ -52,8 +52,8 @@ const crypto = require('crypto');
 const PROJECT_ARCHIVE_ROOT = path.join(os.homedir(), '.cai', 'projects');
 const HISTORY_FILE = 'history.md';
 
-const DEFAULT_RECENT_N = 5;
-const DEFAULT_RECENT_DAYS = 14;
+const DEFAULT_RECENT_N = 10;
+const DEFAULT_RECENT_DAYS = 10;
 
 // ═══════════════════════════════════════════════════════════════════
 // 工具
@@ -83,7 +83,7 @@ function continueSilently() {
 /**
  * 从任务条目正文中提取首行标题(## 行),截断以免过长。
  * @param {string} body  条目正文(含 ## 头)
- * @returns {string}  适合单行展示的摘要,如 "2026-06-14-T002:完善 claude-task-history…"
+ * @returns {string}  适合单行展示的摘要,如 "2026-06-14-T002:完善 claude-log…"
  */
 function summarizeEntry(body) {
   const firstLine = body.split('\n')[0] || '';
@@ -107,7 +107,7 @@ function continueWithContext(ctx, entries) {
   const contextBanner = [
     '---',
     '',
-    '## 📒 claude-task-history 已注入 ' + entries.length + ' 条近期任务',
+    '## 📒 claude-log 已注入 ' + entries.length + ' 条近期任务',
     '',
     ...summaries,
     '',
@@ -220,13 +220,13 @@ function main() {
   let text;
   try { text = fs.readFileSync(archive.historyPath, 'utf8'); } catch (_) { return continueSilently(); }
 
-  const n = parsePositiveInt(process.env.CLAUDE_TASK_HISTORY_RECENT_N, DEFAULT_RECENT_N);
-  const days = parsePositiveInt(process.env.CLAUDE_TASK_HISTORY_RECENT_DAYS, DEFAULT_RECENT_DAYS);
+  const n = parsePositiveInt(process.env.CLAUDE_LOG_RECENT_N, DEFAULT_RECENT_N);
+  const days = parsePositiveInt(process.env.CLAUDE_LOG_RECENT_DAYS, DEFAULT_RECENT_DAYS);
   const recent = pickRecent(splitEntries(text), n, days);
   if (recent.length === 0) return continueSilently();
 
   const header = [
-    `# 📒 近期任务历史 (claude-task-history)`,
+    `# 📒 近期任务历史 (claude-log)`,
     ``,
     `项目路径: ${cwd}`,
     `归档位置: ${archive.historyPath}`,

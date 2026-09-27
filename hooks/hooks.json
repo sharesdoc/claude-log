@@ -1,5 +1,5 @@
 {
-  "description": "claude-task-history — SessionStart 注入近期历史 + Stop 归档三段式任务",
+  "description": "claude-log — SessionStart 注入近期历史 + Stop 归档三段式任务",
   "hooks": {
     "SessionStart": [
       {

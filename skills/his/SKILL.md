@@ -34,7 +34,7 @@ hash=$(printf '%s' "$PWD" \
 hist="$HOME/.cai/projects/$hash/history.md"
 ```
 
-由 `claude-task-history` 插件的 Stop hook 在用户说"任务完成"时自动追加,格式:
+由 `claude-log` 插件的 Stop hook 在用户说"任务完成"时自动追加,格式:
 
 ```text
 ## YYYY-MM-DD-Txxx：标题

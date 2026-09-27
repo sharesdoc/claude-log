@@ -34,7 +34,7 @@ hist="$HOME/.cai/projects/$hash/history.md"
 
 1. **定位文件**：用上述 Bash 计算 `$hist` 并 `Read` 它。若不存在,回答:
 
-   > 当前项目尚无任务历史（`$hist` 不存在）。它将在你首次说「任务完成」后由 claude-task-history 插件自动生成。
+   > 当前项目尚无任务历史（`$hist` 不存在）。它将在你首次说「任务完成」后由 claude-log 插件自动生成。
 
    然后结束。
 
