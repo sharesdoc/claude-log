@@ -242,7 +242,7 @@ write_marketplace_json() {
       "name": "$PLUGIN_NAME",
       "version": "0.1.0",
       "source": "./plugin",
-      "description": "三段式任务归档（需求/方案/验收）+ /his 历史回看"
+      "description": "四段式任务归档（需求/方案/验收/关联标准文件）+ /his 历史回看"
     }
   ]
 }

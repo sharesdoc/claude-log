@@ -7,7 +7,7 @@
  * Claude Code 在每一轮 assistant 回复完成后触发 Stop hook。本脚本读取最新
  * transcript，判断末轮 assistant 是否以「任务完成」落款。若是，则通过
  * Claude Code 的 Stop-hook 阻断机制（decision="block"）向 Claude 注入一条
- * 指令，要求它按 templates/aitask-entry.md 的三段式模板把本轮任务追加到
+ * 指令，要求它按 templates/aitask-entry.md 的四段式模板把本轮任务追加到
  * 项目档案 `$HOME/.cai/projects/<sha1(cwd)>/history.md` 末尾。
  *
  * ## 两阶段分工
@@ -22,7 +22,7 @@
  * ┌─ Claude（下一轮被 block reason 唤醒）──────────┐
  * │ 5. 读取 reason 中的 templatePath / taskId /     │
  * │    historyPath / 字段要求                        │
- * │ 6. 综合本轮对话上下文，蒸馏三段式内容             │
+ * │ 6. 综合本轮对话上下文，蒸馏四段式内容             │
  * │ 7. 追加到 historyPath（Read/Write/Edit tools）   │
  * │ 8. 不说「任务完成」，避免二次触发                 │
  * └────────────────────────────────────────────────┘
@@ -30,7 +30,7 @@
  * ## 为什么不让本脚本直接写文件
  *
  * Python/Node 脚本无法访问本轮对话上下文（tool call 记录、用户意图、
- * 文件改动清单），蒸馏出的三段只能空洞。让 Claude 在 block 恢复后自己
+ * 文件改动清单），蒸馏出的四段只能空洞。让 Claude 在 block 恢复后自己
  * 写文件，能拿满上下文产生高质量的决策审计条目。
  *
  * ## 防死循环
@@ -65,7 +65,7 @@ const TRIGGER_PHRASE = '任务完成';
  * 项目档案根目录(全局):每个项目以 sha1(cwd) 入档。
  * 结构:
  *   $HOME/.cai/projects/<hash>/path        // dir 绝对路径
- *   $HOME/.cai/projects/<hash>/history.md  // 三段式归档
+ *   $HOME/.cai/projects/<hash>/history.md  // 四段式归档
  */
 const PROJECT_ARCHIVE_ROOT = path.join(os.homedir(), '.cai', 'projects');
 
@@ -365,7 +365,7 @@ function main() {
   const reason = [
     `检测到「${TRIGGER_PHRASE}」标志，触发 claude-log 归档流程。`,
     ``,
-    `请按 ${templatePath} 的三段式模板，把本轮已完成任务追加到文件末尾：`,
+    `请按 ${templatePath} 的四段式模板，把本轮已完成任务追加到文件末尾：`,
     `  ${historyPath}`,
     `  (项目哈希 ${hash};对应 cwd: ${cwd})`,
     ``,
@@ -373,9 +373,10 @@ function main() {
     ``,
     `字段填写要求：`,
     `  - 标题：动宾结构、≤30 字、不带句号`,
-    `  - 需求/问题：复述用户最原始诉求，1-2 句`,
-    `  - 决策/方案：本次选了什么、为什么、放弃了什么；含关键 tradeoff`,
-    `  - 验收/总结：实际做了什么、如何验证、踩坑/遗留、下次注意`,
+    `  - 需求/问题：记录用户需求或问题的具体、真实内容，不要泛化或改写成空话`,
+    `  - 决策/方案：记录解决问题或实现需求采用的具体方案、采用理由、注意事项和关键取舍`,
+    `  - 验收/总结：记录最终实际完成情况、验证情况和后续遗留问题`,
+    `  - 关联标准文件：记录相关标准任务文件或标准问题文件的相对项目根目录路径；多个文件用逗号分隔；没有则明确写无，禁止编造路径`,
     ``,
     `规则：`,
     `  - 仅追加新条目，禁止修改历史条目；若文件不存在则创建(目录已由 hook 预建)`,

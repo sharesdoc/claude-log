@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A Claude Code plugin that automatically archives completed tasks as three-part summaries (Request → Decision → Acceptance) into `$HOME/.cai/projects/<sha1(cwd)>/history.md`. Recent history is injected into new sessions via SessionStart hook.
+A Claude Code plugin that automatically archives completed tasks as four-part summaries (Request → Decision → Acceptance → Standard File) into `$HOME/.cai/projects/<sha1(cwd)>/history.md`. Recent history is injected into new sessions via SessionStart hook.
 
 ## Commands
 
@@ -47,7 +47,7 @@ The source is rsync-copied to `~/.claude/plugins/marketplaces/claude-log-local/p
 hooks/hooks.json              # Hook registration (SessionStart matcher: startup|resume|clear)
 scripts/stop-hook.js          # Stop hook: trigger detection → block with reason
 scripts/session-start-hook.js # SessionStart: archive setup + context injection
-templates/aitask-entry.md     # Three-part entry template (TASK_ID, TITLE, REQUEST, DECISION, ACCEPTANCE)
+templates/aitask-entry.md     # Four-part entry template (TASK_ID, TITLE, REQUEST, DECISION, ACCEPTANCE, RELATED_STANDARD_FILE)
 commands/his.md               # /his slash command (reads history for current project)
 skills/his/SKILL.md           # /his skill definition (same logic, richer instructions)
 install                       # Bash install/uninstall/reinstall script

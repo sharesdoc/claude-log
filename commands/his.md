@@ -1,5 +1,5 @@
 ---
-description: 回看当前项目最近 N 天的任务历史（$HOME/.cai/projects/$hash/history.md 三段式归档）。默认 1=今天；/his 2 today+yesterday；/his N 最近 N 天。
+description: 回看当前项目最近 N 天的任务历史（$HOME/.cai/projects/$hash/history.md 四段式归档）。默认 1=今天；/his 2 today+yesterday；/his N 最近 N 天。
 argument-hint: "[N]"
 allowed-tools: [Bash, Read]
 ---
@@ -53,6 +53,7 @@ hist="$HOME/.cai/projects/$hash/history.md"
    - 需求/问题：…（原文）
    - 决策/方案：…（原文）
    - 验收/总结：…（原文）
+   - 关联标准文件：…（原文）
 
    ## YYYY-MM-DD-T002：标题
    …

@@ -1,6 +1,6 @@
 # claude-log
 
-**项目级任务审计日志插件** — 在你对 Claude Code 说"任务完成"那一刻，自动把本轮对话蒸馏为三段式摘要，追加到全局档案 `$HOME/.cai/projects/$hash/history.md`(其中 `hash = sha1(项目绝对路径)`)。用 `/his` 命令随时回看；新开 session 时自动注入近期任务摘要。
+**项目级任务审计日志插件** — 在你对 Claude Code 说"任务完成"那一刻，自动把本轮对话蒸馏为四段式摘要，追加到全局档案 `$HOME/.cai/projects/$hash/history.md`(其中 `hash = sha1(项目绝对路径)`)。用 `/his` 命令随时回看；新开 session 时自动注入近期任务摘要。
 
 ---
 
@@ -14,7 +14,7 @@ claude-mem 能帮你做机器级召回（"上次那个 bug 怎么修的？"）�
 
 - **谁写的**：Claude 在你每轮"任务完成"后自动蒸馏（不需你手动整理）
 - **写在哪**：`$HOME/.cai/projects/$hash/history.md` (全局、按项目路径哈希分桶)
-- **写了什么**：需求/问题 → 决策/方案 → 验收/总结，三段式
+- **写了什么**：需求/问题 → 决策/方案 → 验收/总结 → 关联标准文件，四段式
 - **怎么看**：`/his`（今天）、`/his 3`（近 3 天）；新 session 启动时自动注入最近 10 条/10 天内的条目
 
 ---
@@ -44,7 +44,7 @@ claude-mem 能帮你做机器级召回（"上次那个 bug 怎么修的？"）�
 
 ### 1. 自动归档（Stop hook）
 
-每轮回复结束后，插件的 Stop hook 检查你是否说出了"**任务完成**"。若是，hook 拦截下一轮、注入写指令，Claude 自动把本轮任务以三段式追加到 `$HOME/.cai/projects/$hash/history.md`：
+每轮回复结束后，插件的 Stop hook 检查你是否说出了"**任务完成**"。若是，hook 拦截下一轮、注入写指令，Claude 自动把本轮任务以四段式追加到 `$HOME/.cai/projects/$hash/history.md`：
 
 ```markdown
 ## 2026-05-30-T001：修复登录页面 token 刷新失效
@@ -52,6 +52,7 @@ claude-mem 能帮你做机器级召回（"上次那个 bug 怎么修的？"）�
 - **需求/问题**：登录后 15 分钟内 token 过期未自动续期，导致 API 403，用户需反复登录。
 - **决策/方案**：在 axios 拦截器中检查 401 响应码，用 refreshToken 静默续期（放弃在路由守卫中前置检查，太重且对非路由 API 无效）。
 - **验收/总结**：axios.interceptors.response 新增 reject→401 判断 + retry 队列防并发刷新；手动测试过期 token 场景 + E2E 用例 login-refresh.spec.ts；遗留：refreshToken 本身过期时只弹登录页，未做平滑重定向。
+- **关联标准文件**：`doc/Issue-20260530120000000-P1.md`
 ```
 
 **触发保护**：
@@ -84,7 +85,7 @@ claude-mem 能帮你做机器级召回（"上次那个 bug 怎么修的？"）�
 /his 30   → 最近一个月
 ```
 
-输出倒序排列，完整保留三段原文（不做二次摘要）。末尾附日期维度条数统计。
+输出倒序排列，完整保留四段原文（不做二次摘要）。末尾附日期维度条数统计。
 
 ### 4. 灵活配置
 
@@ -142,7 +143,7 @@ cd /path/to/claude-log
 1. 你下达任务           Claude 正常执行，不做任何记录
 2. …工作完成…
 3. 你说："任务完成"      Stop hook 命中，拦截下一轮
-4.                       Claude 自动蒸馏上下文，追加三段式条目
+4.                       Claude 自动蒸馏上下文，追加四段式条目
 5. 继续下一个任务         /his 随时回看;下次启动时近期条目自动注入
 ```
 
@@ -171,7 +172,7 @@ hash=$(printf '%s' "$PWD" \
 # 归档结构
 $HOME/.cai/projects/<hash>/
 ├── path            # 项目绝对路径(便于反查"这个 hash 是哪个项目")
-└── history.md      # 三段式归档,Stop hook 写入,/his 读取
+└── history.md      # 四段式归档,Stop hook 写入,/his 读取
 ```
 
 为什么不放在项目内?
@@ -186,6 +187,7 @@ $HOME/.cai/projects/<hash>/
 - **需求/问题**：claude-mem-github 在 37d24944 之后有 7 个新提交，需逐一评估并移植到本地改造版，保证本地先进性。
 - **决策/方案**：按时间顺序逐一独立提交移植；跳过版本号 bump 和 CHANGELOG 回填（本地有大量私有特性，不与上游版本号同步）；手工合并 worker-service.ts 和 SettingsDefaultsManager.ts（本地已为 server-mode 大幅改造）。
 - **验收/总结**：5 个移植提交全部通过 byte-equality diff 校验（skills、.mcp.json 删除、transcript 修复）；提交 b0e896e2 的 SettingsDefaultsManager.ts 合并时顺手去掉了相邻 2 行 trailing space（纯 cosmetic）；tests/install-non-tty.test.ts 发现上游遗漏 bug 并同步修复。
+- **关联标准文件**：`doc/Task-20260530130000000-P1.md`
 ```
 
 ---
@@ -235,7 +237,7 @@ claude-log/
 │   ├── stop-hook.js             # Stop hook 脚本（触发检测 + Txxx 编号推算 + 路径解析）
 │   └── session-start-hook.js    # SessionStart hook 脚本（路径就绪 + 历史注入）
 ├── templates/
-│   └── aitask-entry.md          # 三段式模板（提供给 Claude 写入时的字段指引）
+│   └── aitask-entry.md          # 四段式模板（提供给 Claude 写入时的字段指引）
 ├── install                      # 安装/卸载/重装 shell
 └── README.md
 ```
@@ -247,7 +249,7 @@ claude-log/
 | `hooks/hooks.json` | 声明 SessionStart + Stop 两个 hook |
 | `scripts/stop-hook.js` | 检查末轮 assistant 文本是否以"任务完成"落款 → 是则 block + 注入 reason(含 history.md 绝对路径) |
 | `scripts/session-start-hook.js` | 启动时:确保 proj 目录就绪 + 注入近期条目 |
-| `templates/aitask-entry.md` | 模板文件，定义三段式字段与写入规范；被 hook reason 引用 |
+| `templates/aitask-entry.md` | 模板文件，定义四段式字段与写入规范；被 hook reason 引用 |
 | `commands/his.md` | 斜杠命令入口：解析 `[N]` 参数，调度执行步骤 |
 | `skills/his/SKILL.md` | 自然语言触发入口：当用户问"今天做了什么"等时自动匹配 |
 | `install` | 部署脚本：rsync 拷贝 + CLI 注册 marketplace + 启用插件 |
